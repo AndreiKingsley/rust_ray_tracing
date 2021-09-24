@@ -1,13 +1,13 @@
 pub mod geometry {
     use std::ops;
 
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, Default)]
     pub struct Vec2 {
         pub x: f64,
-        pub y: f64
+        pub y: f64,
     }
 
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, Default)]
     pub struct Vec3 {
         pub x: f64,
         pub y: f64,
@@ -104,11 +104,11 @@ pub mod geometry {
         *i - *n * 2.0 * (*i * *n)
     }
 
-    #[derive(Debug, Copy, Clone)]
+    #[derive(Debug, Copy, Clone, Default)]
     pub struct Material {
         pub diffuse_color: Vec3,
-        pub albedo: Vec2,
-        pub specular_exponent: f64
+        pub albedo: Vec3,
+        pub specular_exponent: f64,
     }
 
     #[derive(Debug, Copy, Clone)]
@@ -125,7 +125,7 @@ pub mod geometry {
 
     impl Sphere {
         fn ray_intersect(&self, orig: &Vec3, dir: &Vec3, t0: &mut f64) -> bool {
-            let l = self.center + *orig;
+            let l = self.center - *orig;
             let tca = l * (*dir);
             let d2 = l * l - tca * tca;
             let radius_squared = self.radius * self.radius;
@@ -170,28 +170,13 @@ pub mod geometry {
         orig: &Vec3,
         dir: &Vec3,
         spheres: &Vec<Sphere>,
-        lights: &Vec<Light>
+        lights: &Vec<Light>,
+        depth: usize,
     ) -> Vec3 {
-        let mut point = Vec3 {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        };
-        let mut n = Vec3 {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
-        };
-        let mut material = Material {
-            diffuse_color: Vec3 {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            albedo: Vec2 { x: 0.0, y: 0.0 },
-            specular_exponent: 0.0
-        };
-        if !scene_intersect(orig, dir, &spheres, &mut point, &mut n, &mut material) {
+        let mut point = Vec3::default();
+        let mut n = Vec3::default();
+        let mut material = Material::default();
+        if depth > 4 || !scene_intersect(orig, dir, &spheres, &mut point, &mut n, &mut material) {
             return Vec3 {
                 x: 0.2,
                 y: 0.7,
@@ -199,10 +184,43 @@ pub mod geometry {
             };
         }
 
+        let reflect_dir = reflect(dir, &n).normalized();
+        let reflect_orig = if reflect_dir * n < 0.0 {
+            point - n * 1e-3
+        } else {
+            point + n * 1e-3
+        };
+        let reflect_color = cast_ray(&reflect_orig, &reflect_dir, spheres, lights, depth+1);
+
         let mut diffuse_light_intensity = 0.0;
         let mut specular_light_intensity = 0.0;
-        for light in lights{
+        for light in lights {
             let light_dir = (light.position - point).normalized();
+            let light_distance = (light.position - point).norm();
+
+            let shadow_orig = if light_dir * n < 0.0 {
+                point - n * 1e-3
+            } else {
+                point + n * 1e-3
+            };
+
+            let mut shadow_pt = Vec3::default();
+            let mut shadow_n = Vec3::default();
+
+            let mut tmp_material = Material::default();
+
+            if scene_intersect(
+                &shadow_orig,
+                &light_dir,
+                spheres,
+                &mut shadow_pt,
+                &mut shadow_n,
+                &mut tmp_material,
+            ) && (shadow_pt - shadow_orig).norm() < (light.position - point).norm() {
+                continue;
+            }
+
+
             let light_coeff = light_dir * n;
             if light_coeff > 0.0 {
                 diffuse_light_intensity += light.intensity * light_coeff
@@ -217,7 +235,7 @@ pub mod geometry {
             Vec3 {
                 x: 1.0,
                 y: 1.0,
-                z: 1.0
-            } * specular_light_intensity * material.albedo.y
+                z: 1.0,
+            } * specular_light_intensity * material.albedo.y + reflect_color * material.albedo.z
     }
 }
