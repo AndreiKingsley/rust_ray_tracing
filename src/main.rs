@@ -13,8 +13,9 @@ fn main() {
             y: 0.4,
             z: 0.3,
         },
-        albedo: Vec3 { x: 0.6, y: 0.3, z: 0.1 },
+        albedo: Vec4 { x: 0.6, y: 0.3, z: 0.1, w: 0.0 },
         specular_exponent: 50.0,
+        refractive_index: 1.0
     };
 
     let red_rubber = Material {
@@ -23,8 +24,9 @@ fn main() {
             y: 0.1,
             z: 0.1,
         },
-        albedo: Vec3 { x: 0.9, y: 0.1, z: 0.0 },
-        specular_exponent: 1.0,
+        albedo: Vec4 { x: 0.9, y: 0.1, z: 0.0, w: 0.0 },
+        specular_exponent: 10.0,
+        refractive_index: 1.0
     };
 
     let mirror = Material {
@@ -33,8 +35,20 @@ fn main() {
             y: 1.0,
             z: 1.0,
         },
-        albedo: Vec3 { x: 0.0, y: 10.0, z:0.8 },
+        albedo: Vec4 { x: 0.0, y: 10.0, z:0.8, w: 0.0 },
         specular_exponent: 1425.0,
+        refractive_index: 1.0
+    };
+
+    let glass = Material {
+        diffuse_color: Vec3 {
+            x: 0.6,
+            y: 0.7,
+            z: 0.8,
+        },
+        albedo: Vec4 { x: 0.0, y: 0.5, z:0.1, w: 0.8 },
+        specular_exponent: 125.0,
+        refractive_index: 1.5
     };
 
     let mut spheres = vec![];
@@ -59,7 +73,7 @@ fn main() {
                 z: -12.0,
             },
             radius: 2.0,
-            material: mirror,
+            material: glass,
         }
     );
 
@@ -100,7 +114,7 @@ fn main() {
             position: Vec3 {
                 x: 30.0,
                 y: 50.0,
-                z: -22.0,
+                z: -25.0,
             },
             intensity: 1.8,
         },

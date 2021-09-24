@@ -1,10 +1,12 @@
 pub mod geometry {
     use std::ops;
 
-    #[derive(Debug, Copy, Clone, Default)]
-    pub struct Vec2 {
+    #[derive(Debug, Copy, Clone)]
+    pub struct Vec4 {
         pub x: f64,
         pub y: f64,
+        pub z: f64,
+        pub w: f64,
     }
 
     #[derive(Debug, Copy, Clone, Default)]
@@ -104,11 +106,46 @@ pub mod geometry {
         *i - *n * 2.0 * (*i * *n)
     }
 
-    #[derive(Debug, Copy, Clone, Default)]
+    pub fn refract(i: &Vec3, n: &Vec3, eta_t: f64, eta_i: f64) -> Vec3 {
+        let cosi = (-1.0) * (*i * *n).clamp(-1.0, 1.0);
+        if cosi < 0.0 {
+            return refract(i, &(*n * -1.0), eta_i, eta_t);
+        }
+        let eta = eta_i / eta_t;
+        let k = 1.0 - eta * eta * (1.0 - cosi * cosi);
+        if k < 0.0 {
+            Vec3 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            }
+        } else {
+            *i * eta + *n * (eta * cosi - k.sqrt())
+        }
+    }
+
+    #[derive(Debug, Copy, Clone)]
     pub struct Material {
         pub diffuse_color: Vec3,
-        pub albedo: Vec3,
+        pub albedo: Vec4,
         pub specular_exponent: f64,
+        pub refractive_index: f64,
+    }
+
+    impl Default for Material {
+        fn default() -> Self {
+            Self {
+                diffuse_color: Default::default(),
+                albedo: Vec4 {
+                    x: 1.0,
+                    y: 0.0,
+                    z: 0.0,
+                    w: 0.0,
+                },
+                specular_exponent: 0.0,
+                refractive_index: 1.0,
+            }
+        }
     }
 
     #[derive(Debug, Copy, Clone)]
@@ -153,17 +190,46 @@ pub mod geometry {
         n: &mut Vec3,
         material: &mut Material,
     ) -> bool {
-        let mut sphere_dist: f64 = f64::MAX;
+        let mut spheres_dist: f64 = f64::MAX;
         for sphere in spheres {
             let mut dist_i: f64 = 0.0;
-            if sphere.ray_intersect(orig, dir, &mut dist_i) && dist_i < sphere_dist {
-                sphere_dist = dist_i;
+            if sphere.ray_intersect(orig, dir, &mut dist_i) && dist_i < spheres_dist {
+                spheres_dist = dist_i;
                 *hit = *orig + *dir * dist_i;
                 *n = (*hit - sphere.center).normalized();
                 *material = sphere.material;
             }
         }
-        return sphere_dist < 1000.0;
+
+        let mut checkerboard_dist = f64::MAX;
+        if dir.y.abs() > 1e-3 {
+            let d = -1.0 * (orig.y + 4.0) / dir.y;
+            let pt = *orig + *dir * d;
+            if d > 0.0 && pt.x.abs() < 10.0 && pt.z < -10.0 && pt.z > -30.0 && d < spheres_dist {
+                checkerboard_dist = d;
+                *hit = pt;
+                *n = Vec3 {
+                    x: 0.0,
+                    y: 1.0,
+                    z: 0.0,
+                };
+                material.diffuse_color =
+                    if (((0.5 * hit.x + 1000.0) as i32) + ((0.5 * hit.z) as i32)) & 1 == 1 {
+                        Vec3 {
+                            x: 0.3,
+                            y: 0.3,
+                            z: 0.3,
+                        }
+                    } else {
+                        Vec3 {
+                            x: 0.3,
+                            y: 0.2,
+                            z: 0.1,
+                        }
+                    }
+            }
+        }
+        return spheres_dist.min(checkerboard_dist) < 1000.0;
     }
 
     pub fn cast_ray(
@@ -190,7 +256,17 @@ pub mod geometry {
         } else {
             point + n * 1e-3
         };
-        let reflect_color = cast_ray(&reflect_orig, &reflect_dir, spheres, lights, depth+1);
+
+        let reflect_color = cast_ray(&reflect_orig, &reflect_dir, spheres, lights, depth + 1);
+
+        let refract_dir = refract(dir, &n, material.refractive_index, 1.0).normalized();
+        let refract_orig = if refract_dir * n < 0.0 {
+            point - n * 1e-3
+        } else {
+            point + n * 1e-3
+        };
+
+        let refract_color = cast_ray(&refract_orig, &refract_dir, spheres, lights, depth + 1);
 
         let mut diffuse_light_intensity = 0.0;
         let mut specular_light_intensity = 0.0;
@@ -236,6 +312,8 @@ pub mod geometry {
                 x: 1.0,
                 y: 1.0,
                 z: 1.0,
-            } * specular_light_intensity * material.albedo.y + reflect_color * material.albedo.z
+            } *
+                specular_light_intensity * material.albedo.y
+            + reflect_color * material.albedo.z + refract_color * material.albedo.w
     }
 }
