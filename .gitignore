@@ -1,4 +1,4 @@
 /target
-file.ppm
+*.ppm
 .idea
 Cargo.lock

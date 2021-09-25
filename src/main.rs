@@ -1,5 +1,8 @@
-use ray_tracing::geometry::*;
-use std::io::Write;
+use ray_tracing::algebra_models::*;
+use ray_tracing::materials::*;
+use ray_tracing::physical_models::*;
+use ray_tracing::ppm::write_to_ppm;
+use ray_tracing::raycasting::cast_ray;
 use std::f64::consts::PI;
 
 fn main() {
@@ -7,53 +10,7 @@ fn main() {
     const HEIGHT: usize = 768;
     const FOV: f64 = PI / 3.0;
 
-    let ivory = Material {
-        diffuse_color: Vec3 {
-            x: 0.4,
-            y: 0.4,
-            z: 0.3,
-        },
-        albedo: Vec4 { x: 0.6, y: 0.3, z: 0.1, w: 0.0 },
-        specular_exponent: 50.0,
-        refractive_index: 1.0
-    };
-
-    let red_rubber = Material {
-        diffuse_color: Vec3 {
-            x: 0.3,
-            y: 0.1,
-            z: 0.1,
-        },
-        albedo: Vec4 { x: 0.9, y: 0.1, z: 0.0, w: 0.0 },
-        specular_exponent: 10.0,
-        refractive_index: 1.0
-    };
-
-    let mirror = Material {
-        diffuse_color: Vec3 {
-            x: 1.0,
-            y: 1.0,
-            z: 1.0,
-        },
-        albedo: Vec4 { x: 0.0, y: 10.0, z:0.8, w: 0.0 },
-        specular_exponent: 1425.0,
-        refractive_index: 1.0
-    };
-
-    let glass = Material {
-        diffuse_color: Vec3 {
-            x: 0.6,
-            y: 0.7,
-            z: 0.8,
-        },
-        albedo: Vec4 { x: 0.0, y: 0.5, z:0.1, w: 0.8 },
-        specular_exponent: 125.0,
-        refractive_index: 1.5
-    };
-
-    let mut spheres = vec![];
-
-    spheres.push(
+    let spheres = vec![
         Sphere {
             center: Vec3 {
                 x: -3.0,
@@ -61,11 +18,8 @@ fn main() {
                 z: -16.0,
             },
             radius: 2.0,
-            material: ivory,
-        }
-    );
-
-    spheres.push(
+            material: IVORY,
+        },
         Sphere {
             center: Vec3 {
                 x: -1.0,
@@ -73,11 +27,8 @@ fn main() {
                 z: -12.0,
             },
             radius: 2.0,
-            material: glass,
-        }
-    );
-
-    spheres.push(
+            material: GLASS,
+        },
         Sphere {
             center: Vec3 {
                 x: 1.5,
@@ -85,11 +36,8 @@ fn main() {
                 z: -18.0,
             },
             radius: 3.0,
-            material: red_rubber,
-        }
-    );
-
-    spheres.push(
+            material: RED_RUBBER,
+        },
         Sphere {
             center: Vec3 {
                 x: 7.0,
@@ -97,9 +45,9 @@ fn main() {
                 z: -18.0,
             },
             radius: 4.0,
-            material: mirror,
-        }
-    );
+            material: MIRROR,
+        },
+    ];
 
     let lights = vec![
         Light {
@@ -125,58 +73,21 @@ fn main() {
                 z: 30.0,
             },
             intensity: 1.7,
-        }
+        },
     ];
 
-    let mut buffer = vec![Vec3 { x: 0.0, y: 0.0, z: 0.0 }; WIDTH * HEIGHT];
+    let mut pixel_buffer = vec![Vec3::default(); WIDTH * HEIGHT];
 
     for j in 0..HEIGHT {
         for i in 0..WIDTH {
-            let x = (2.0 * (i as f64 + 0.5) / WIDTH as f64 - 1.0) * (FOV / 2.0).tan() * WIDTH as f64 / HEIGHT as f64;
+            let x =
+                (2.0 * (i as f64 + 0.5) / WIDTH as f64 - 1.0) * (FOV / 2.0).tan() * WIDTH as f64
+                    / HEIGHT as f64;
             let y = -(2.0 * (j as f64 + 0.5) / HEIGHT as f64 - 1.0) * (FOV / 2.0).tan();
-            let dir = Vec3 {
-                x: x,
-                y: y,
-                z: -1.0,
-            }.normalized();
-            buffer[i + j * WIDTH] = cast_ray(
-                &Vec3 {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                },
-                &dir,
-                &spheres,
-                &lights,
-                0
-            );
+            let dir = Vec3 { x, y, z: -1.0 }.normalized();
+            pixel_buffer[i + j * WIDTH] = cast_ray(&Vec3::default(), &dir, &spheres, &lights, 0);
         }
     }
 
-    let mut file = std::fs::File::create("file.ppm").unwrap();
-    writeln!(file, "P6").unwrap();
-    writeln!(file, "{} {}", WIDTH, HEIGHT).unwrap();
-    writeln!(file, "{}", 255 as u8).unwrap();
-
-    for i in 0..HEIGHT * WIDTH {
-        let cx: u8 = (255.0 * buffer[i].x) as u8;
-        let cy: u8 = (255.0 * buffer[i].y) as u8;
-        let cz: u8 = (255.0 * buffer[i].z) as u8;
-
-        file.write(&[cx, cy, cz]).unwrap();
-    }
-
-
-    let v1 = Vec3 {
-        x: 2.0,
-        y: 3.0,
-        z: 5.0,
-    };
-    let v2 = Vec3 {
-        x: 7.0,
-        y: 11.0,
-        z: 13.0,
-    };
-    println!("{}", v1 * v2);
-    println!("{:?}", cross_product(&v1, &v2));
+    write_to_ppm("image.ppm", WIDTH, HEIGHT, &*pixel_buffer, 255);
 }
